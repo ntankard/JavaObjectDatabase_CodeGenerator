@@ -64,7 +64,7 @@ class ClassGenerator:
                 self._full_fields.insert(self._full_fields.index(self._follow_field) + 1, field)
                 self._follow_field = field
 
-        return self._follow_field, self._full_fields
+        return self._follow_field, self._full_fields.copy()
 
     def process_existing_file(self, file_lines):
         """
@@ -193,12 +193,8 @@ class ClassGenerator:
                 to_string_method.comment.append("@inheritDoc")
                 to_string_method.attributes.append("@Override")
 
-                to_string_method.lines.append("try {")
-                to_string_method.lines.append("    return get" + field['name'] + "()")
-                to_string_method.lines.append("}catch (Exception e){")
-                to_string_method.lines.append("    return \"NO NAME\"")
-                to_string_method.lines.append("}")
-            break
+                to_string_method.lines.append("return get" + field['name'] + "()")
+                break
 
     def _add_getters(self, java_class):
         java_class.add_method_divider("Getters")
@@ -232,4 +228,4 @@ class RootClassGenerator:
         pass
 
     def get_full_field_list(self):
-        return self._follow_field, self._full_fields
+        return self._follow_field, self._full_fields.copy()
