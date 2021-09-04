@@ -11,7 +11,9 @@ class ClassGenerator:
         _package (str):         A list of import lines, should include blank lines for spacing as needed
         _field_prefix (str):    The main class of the file matching the name of the file
         _fields (dict):         The fields to be writen
-        _imports(list[str]):    The imports to add at the top of the file
+        _imports (list[str]):   The imports to add at the top of the file
+        _abstract (bool):       True if the class is abstract
+        _has_general (bool)     Does this class have any additional general methods
     """
 
     def __init__(self, json, class_name, package):
@@ -29,9 +31,13 @@ class ClassGenerator:
         self._field_prefix = self._class_name + "_Prefix"
         self._fields = self._json_data['fields']
         self._imports = []
+        self._abstract = 'abstract' in self._json_data and self._json_data['abstract']
+        self._has_general = False
 
         for field in self._json_data['fields']:
             field['key'] = class_name + "_" + field['name']
+            if 'string_source' in field and field['string_source']:
+                self._has_general = True
 
     def process_existing_file(self, file_lines):
         for line in file_lines:
@@ -54,10 +60,16 @@ class ClassGenerator:
 
         # Create the core class
         java_class = file.get_core_class()
+        java_class.abstract = self._abstract
+
+        # Add all code
         self._add_field_key_definitions(java_class)
         self._add_schema_method(java_class)
         self._add_min_constructor(java_class)
-        self._add_full_constructor(java_class)
+        if not self._abstract:
+            self._add_full_constructor(java_class)
+        if self._has_general:
+            self._add_general_methods(java_class)
         self._add_getters(java_class)
 
         return file
@@ -71,8 +83,12 @@ class ClassGenerator:
 
         # All all the fields
         for field in self._fields:
-            java_class.lines.append("public static final String " + field['key'] +
-                                    " = " + self._field_prefix + " + \"" + field['name'] + "\"")
+            if 'use_get_name' in field and field['use_get_name']:
+                java_class.lines.append("public static final String " + field['key'] +
+                                        " = \"get" + field['name'] + "\"")
+            else:
+                java_class.lines.append("public static final String " + field['key'] +
+                                        " = " + self._field_prefix + " + \"" + field['name'] + "\"")
 
     def _add_schema_method(self, java_class):
         # Setup the method
@@ -93,7 +109,10 @@ class ClassGenerator:
         schema_method.lines.append("")
 
         # Close the method
-        schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self._class_name + ".class)")
+        if self._abstract:
+            schema_method.lines.append("return dataObjectSchema.endLayer(" + self._class_name + ".class)")
+        else:
+            schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self._class_name + ".class)")
 
     def _add_min_constructor(self, java_class):
         constructor_method = java_class.add_method(self._class_name)
@@ -124,6 +143,22 @@ class ClassGenerator:
         else:
             full_constructor_method.param.insert(0, "Database database")
             full_constructor_method.lines.insert(0, "this(database)")
+
+    def _add_general_methods(self, java_class):
+        java_class.add_method_divider("General")
+        for field in self._fields:
+            if 'string_source' in field and field['string_source']:
+                to_string_method = java_class.add_method("toString")
+                to_string_method.return_type = "String"
+                to_string_method.comment.append("@inheritDoc")
+                to_string_method.attributes.append("@Override")
+
+                to_string_method.lines.append("try {")
+                to_string_method.lines.append("    return get" + field['name'] + "()")
+                to_string_method.lines.append("}catch (Exception e){")
+                to_string_method.lines.append("    return \"NO NAME\"")
+                to_string_method.lines.append("}")
+            break
 
     def _add_getters(self, java_class):
         java_class.add_method_divider("Getters")
