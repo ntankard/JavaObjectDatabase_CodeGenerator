@@ -1,26 +1,48 @@
 import json
 import os
 import sys
+import traceback
 
-from java_object_utill.java_object_generator import ClassGenerator
+from java_object_utill.java_object_generator import ClassGenerator, RootClassGenerator
 
 
 def parse_all_files(core_path, start_package):
-    for path, subdir, files in os.walk(core_path):
-        for name in files:
-            core_name, extension = os.path.splitext(name)
-            if extension == ".json":
-                parse_file(core_name, path, start_package + path.replace(core_path, "").replace('\\', '.'))
+    try:
+        java_files = []
+        java_files_dict = {'Displayable_DataObject': RootClassGenerator()}
+
+        for path, subdir, files in os.walk(core_path):
+            for name in files:
+                core_name, extension = os.path.splitext(name)
+                if extension == ".json":
+                    file = parse_file(core_name, path, start_package + path.replace(core_path, "").replace('\\', '.'),
+                                      java_files_dict)
+                    java_files.append(file)
+                    java_files_dict[file.class_name] = file
+
+    except Exception as e:
+        traceback.print_exc()
+        print(e)
+        return
+
+    for java_file in java_files:
+        try:
+            to_write = java_file.generate()
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
+            return
+        write_file(java_file.java_path, to_write)
 
 
-def parse_file(core_name, path, package):
+def parse_file(core_name, path, package, java_files_dict):
     java_path = os.path.join(path, core_name + ".java")
     json_path = os.path.join(path, core_name + ".json")
 
     # Open the file and parse the JSON data
     f = open(json_path, )
     data = json.load(f)
-    gen = ClassGenerator(data, core_name, package)
+    gen = ClassGenerator(data, core_name, package, java_path, java_files_dict)
 
     # Parse the existing file if it exists for escape code
     if os.path.isfile(java_path):
@@ -31,10 +53,11 @@ def parse_file(core_name, path, package):
             lines = [line.rstrip() for line in lines]
         gen.process_existing_file(lines)
 
-
     # Generate the JavaObject
-    file = gen.generate()
+    return gen
 
+
+def write_file(java_path, file):
     # Write the file
     with open(java_path, "w") as myFile:
         lines = []

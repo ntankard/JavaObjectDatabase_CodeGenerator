@@ -6,17 +6,22 @@ class ClassGenerator:
     A utility for generating a JavaObject class based on a json file
 
     Attributes:
-        _json_data (dict):      The file and class name
-        _class_name (str):      The package string (x.x.x)
-        _package (str):         A list of import lines, should include blank lines for spacing as needed
-        _field_prefix (str):    The main class of the file matching the name of the file
-        _fields (dict):         The fields to be writen
-        _imports (list[str]):   The imports to add at the top of the file
-        _abstract (bool):       True if the class is abstract
-        _has_general (bool)     Does this class have any additional general methods
+        _json_data (dict):                  The file and class name
+        class_name (str):                   The package string (x.x.x)
+        _package (str):                     A list of import lines, should include blank lines for spacing as needed
+        java_path (str):                    The path of the file
+        _field_prefix (str):                The main class of the file matching the name of the file
+        _fields (list[dict]):               The fields to be writen
+        _imports (list[str]):               The imports to add at the top of the file
+        _abstract (bool):                   True if the class is abstract
+        _has_general (bool)                 Does this class have any additional general methods
+        _class_dict (dict{ClassGenerator}): A dict containing all ClassGenerator found in the package mapped to there
+                                            class name
+        _follow_field (dict)                The field that any new fields should follow to maintain the intended order
+        _full_fields (list(dict))           All fields in order that this class can use, including its own and parents
     """
 
-    def __init__(self, json, class_name, package):
+    def __init__(self, json, class_name, package, java_path, class_dict):
         """
         A utility for generating a JavaObject class based on a json file
 
@@ -24,22 +29,50 @@ class ClassGenerator:
             json (dict):        The raw json data describing the class to be generated
             class_name (str):   The name of the class
             package (str):      The package the class lives in
+            java_path (str):    The path of the file
         """
         self._json_data = json
-        self._class_name = class_name
+        self.class_name = class_name
         self._package = package
-        self._field_prefix = self._class_name + "_Prefix"
+        self.java_path = java_path
+        self._field_prefix = self.class_name + "_Prefix"
         self._fields = self._json_data['fields']
         self._imports = []
         self._abstract = 'abstract' in self._json_data and self._json_data['abstract']
         self._has_general = False
+        self._class_dict = class_dict
+        self._follow_field = None
+        self._full_fields = []
 
         for field in self._json_data['fields']:
             field['key'] = class_name + "_" + field['name']
             if 'string_source' in field and field['string_source']:
                 self._has_general = True
 
+    def get_full_field_list(self):
+        """
+        Get all the fields this class knows about, including its own and fields from its parents in the intended order
+
+        Returns:
+            A tuple consisting of the field that any children objects should follow and a list of all the fields this
+            object knows about
+        """
+        if self._follow_field is None:
+            self._follow_field, self._full_fields = self._class_dict[
+                self._json_data['extendsSchema']].get_full_field_list()
+            for field in self._fields:
+                self._full_fields.insert(self._full_fields.index(self._follow_field) + 1, field)
+                self._follow_field = field
+
+        return self._follow_field, self._full_fields
+
     def process_existing_file(self, file_lines):
+        """
+        Read the existing generated file to extract any needed data
+
+        Args:
+            file_lines (list[str]): The lines of the previously generated file
+        """
         for line in file_lines:
             if line.startswith("import"):
                 self._imports.append(line)
@@ -51,7 +84,10 @@ class ClassGenerator:
         Returns:
             The generated JavaFile ready to be writen
         """
-        file = code_generator.java.java_code_generator.JavaFile(self._class_name, self._package)
+
+        # Finalise self
+        self.get_full_field_list()
+        file = code_generator.java.java_code_generator.JavaFile(self.class_name, self._package)
 
         # Populate the header of the file
         file.get_core_class().extensions.append(self._json_data['extends'])
@@ -78,7 +114,7 @@ class ClassGenerator:
         # Add the prefix
         java_class.lines.append("")
         java_class.lines.append(
-            "private static final String " + self._field_prefix + " = \"" + self._class_name + "_\"")
+            "private static final String " + self._field_prefix + " = \"" + self.class_name + "_\"")
         java_class.lines.append("")
 
         # All all the fields
@@ -103,26 +139,30 @@ class ClassGenerator:
         schema_method.lines.append("")
 
         # Add all the new fields
-        for field in self._fields:
-            schema_method.lines.append(
-                "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
+        for field in self._full_fields:
+            if field in self._fields:
+                # for field in self._fields:
+                schema_method.lines.append(
+                    "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
+            else:
+                schema_method.lines.append("// " + field['name'])
         schema_method.lines.append("")
 
         # Close the method
         if self._abstract:
-            schema_method.lines.append("return dataObjectSchema.endLayer(" + self._class_name + ".class)")
+            schema_method.lines.append("return dataObjectSchema.endLayer(" + self.class_name + ".class)")
         else:
-            schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self._class_name + ".class)")
+            schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self.class_name + ".class)")
 
     def _add_min_constructor(self, java_class):
-        constructor_method = java_class.add_method(self._class_name)
+        constructor_method = java_class.add_method(self.class_name)
         constructor_method.comment.append("Constructor")
         constructor_method.param.append("Database database")
         constructor_method.lines.append("super(database)")
 
     def _add_full_constructor(self, java_class):
         # Setup the method
-        full_constructor_method = java_class.add_method(self._class_name)
+        full_constructor_method = java_class.add_method(self.class_name)
         full_constructor_method.comment.append("Constructor")
         database_source = None
 
@@ -166,3 +206,30 @@ class ClassGenerator:
             getter_method = java_class.add_method("get" + field['name'])
             getter_method.return_type = field['type']
             getter_method.lines.append("return get(" + field['key'] + ")")
+
+
+class RootClassGenerator:
+    """
+    A thin, dummy ClassGenerator used to be the root of all get_full_field_list calls. This class is needed as all
+    DataObject's inherit from a central class that is not defined in the same package as all the objects. See
+    ClassGenerator for documentation
+    """
+
+    def __init__(self):
+        self._class_name = "Displayable_DataObject"
+        self._fields = []
+        self._fields.append({'name': "ID",
+                             'type': "Integer",
+                             'use_get_name': True})
+        self._fields.append({'name': "Children",
+                             'type': "DataObjectList",
+                             'use_get_name': True})
+
+        self._follow_field = self._fields[0]
+        self._full_fields = self._fields
+
+    def set_class_dict(self, class_dict):
+        pass
+
+    def get_full_field_list(self):
+        return self._follow_field, self._full_fields

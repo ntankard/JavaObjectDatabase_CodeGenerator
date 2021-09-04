@@ -280,7 +280,6 @@ class JavaMethod:
                 add_code_line(line, file_lines, self._tab_offset + 1)
 
 
-
 def add_code_line(text, file_lines, tabs):
     """
     Add a line of code, with tabs in front of it and a ; with a end of line at the end
@@ -294,7 +293,7 @@ def add_code_line(text, file_lines, tabs):
     for x in range(tabs):
         line += "    "
     line += text
-    if text.endswith("{") or text.endswith("}"):
+    if text.endswith("{") or text.endswith("}") or text.startswith("//"):
         line += "\n"
     else:
         line += ";\n"
