@@ -15,6 +15,7 @@ class ClassGenerator:
         _imports (list[str]):               The imports to add at the top of the file
         _abstract (bool):                   True if the class is abstract
         _has_general (bool)                 Does this class have any additional general methods
+        _has_setter (bool)                  Do any of the fields require setters
         _class_dict (dict{ClassGenerator}): A dict containing all ClassGenerator found in the package mapped to there
                                             class name
         _follow_field (dict)                The field that any new fields should follow to maintain the intended order
@@ -40,6 +41,7 @@ class ClassGenerator:
         self._imports = []
         self._abstract = 'abstract' in self._json_data and self._json_data['abstract']
         self._has_general = False
+        self._has_setter = False
         self._class_dict = class_dict
         self._follow_field = None
         self._full_fields = []
@@ -48,6 +50,8 @@ class ClassGenerator:
             field['key'] = class_name + "_" + field['name']
             if 'string_source' in field and field['string_source']:
                 self._has_general = True
+            if 'editable' in field and field['editable']:
+                self._has_setter = True
 
     def get_full_field_list(self):
         """
@@ -107,6 +111,8 @@ class ClassGenerator:
         if self._has_general:
             self._add_general_methods(java_class)
         self._add_getters(java_class)
+        if self._has_setter:
+            self._add_setters(java_class)
 
         return file
 
@@ -148,11 +154,30 @@ class ClassGenerator:
                 schema_method.lines.append("// " + field['name'])
         schema_method.lines.append("")
 
+        self._add_field_config(schema_method)
+
         # Close the method
         if self._abstract:
             schema_method.lines.append("return dataObjectSchema.endLayer(" + self.class_name + ".class)")
         else:
             schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self.class_name + ".class)")
+
+    def _add_field_config(self, schema_method):
+        any_print = False
+        for field in self._fields:
+            if 'editable' in field and field['editable']:
+                any_print = True
+                divide_line = "// " + field['name'] + " "
+                for x in range(108 - len(field['name'])):
+                    divide_line += "="
+                schema_method.lines.append(divide_line)
+                schema_method.lines.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
+        if any_print:
+            divide_line = "//"
+            for x in range(110):
+                divide_line += "="
+            schema_method.lines.append(divide_line)
+            schema_method.lines.append("")
 
     def _add_min_constructor(self, java_class):
         constructor_method = java_class.add_method(self.class_name)
@@ -168,11 +193,12 @@ class ClassGenerator:
 
         # Setup the set call and parameters
         set_line = "setAllValues(DataObject_Id, getTrackingDatabase().getNextId()\n"
-        for field in self._fields:
-            full_constructor_method.param.append(field['type'] + " " + field['name'].lower())
-            set_line += "                , " + field['key'] + ", " + field['name'].lower() + '\n'
-            if 'database_source' in field and field['database_source']:
-                database_source = field
+        for field in self._full_fields:
+            if not ('avoid_constructor' in field) or (not field['avoid_constructor']):
+                full_constructor_method.param.append(field['type'] + " " + field['name'].lower())
+                set_line += "                , " + field['key'] + ", " + field['name'].lower() + '\n'
+                if 'database_source' in field and field['database_source']:
+                    database_source = field
         set_line += "       )"
         full_constructor_method.lines.append(set_line)
 
@@ -203,6 +229,15 @@ class ClassGenerator:
             getter_method.return_type = field['type']
             getter_method.lines.append("return get(" + field['key'] + ")")
 
+    def _add_setters(self, java_class):
+        java_class.add_method_divider("Setters")
+        for field in self._fields:
+            if 'editable' in field and field['editable']:
+                setter_method = java_class.add_method("set" + field['name'])
+                setter_method.return_type = "void"
+                setter_method.param.append(field['type'] + " " + field['name'].lower())
+                setter_method.lines.append("set(" + field['key'] + ", " + field['name'].lower() + ")")
+
 
 class RootClassGenerator:
     """
@@ -216,10 +251,12 @@ class RootClassGenerator:
         self._fields = []
         self._fields.append({'name': "ID",
                              'type': "Integer",
-                             'use_get_name': True})
+                             'use_get_name': True,
+                             'avoid_constructor': True})
         self._fields.append({'name': "Children",
                              'type': "DataObjectList",
-                             'use_get_name': True})
+                             'use_get_name': True,
+                             'avoid_constructor': True})
 
         self._follow_field = self._fields[0]
         self._full_fields = self._fields
