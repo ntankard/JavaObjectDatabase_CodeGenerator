@@ -1,4 +1,5 @@
 import code_generator.java.java_code_generator
+from code_generator.java.java_code_generator import *
 
 
 class ClassGenerator:
@@ -12,8 +13,6 @@ class ClassGenerator:
         java_path (str):                    The path of the file
         _field_prefix (str):                The main class of the file matching the name of the file
         _fields (list[dict]):               The fields to be writen
-        _imports (list[str]):               The imports to add at the top of the file
-        _abstract (bool):                   True if the class is abstract
         _has_general (bool)                 Does this class have any additional general methods
         _has_setter (bool)                  Do any of the fields require setters
         _class_dict (dict{ClassGenerator}): A dict containing all ClassGenerator found in the package mapped to there
@@ -38,19 +37,37 @@ class ClassGenerator:
         self.java_path = java_path
         self._field_prefix = self.class_name + "_Prefix"
         self._fields = self._json_data['fields']
-        self._imports = []
-        self._abstract = 'abstract' in self._json_data and self._json_data['abstract']
         self._has_general = False
         self._has_setter = False
         self._class_dict = class_dict
         self._follow_field = None
         self._full_fields = []
 
-        for field in self._json_data['fields']:
+        self.file = JavaFile(class_name, package)
+
+        # Populate optional parameters with defaults
+        if 'abstract' not in self._json_data:
+            self._json_data['abstract'] = False
+
+        # For all fields, populate optional parameters with default
+        for field in self._fields:
             field['key'] = class_name + "_" + field['name']
-            if 'string_source' in field and field['string_source']:
+            if 'use_get_name' not in field:
+                field['use_get_name'] = False
+            if 'string_source' not in field:
+                field['string_source'] = False
+            if 'editable' not in field:
+                field['editable'] = False
+            if 'avoid_constructor' not in field:
+                field['avoid_constructor'] = False
+            if 'database_source' not in field:
+                field['database_source'] = False
+
+        # TODO remove
+        for field in self._json_data['fields']:
+            if field['string_source']:
                 self._has_general = True
-            if 'editable' in field and field['editable']:
+            if field['editable']:
                 self._has_setter = True
 
     def get_full_field_list(self):
@@ -79,7 +96,7 @@ class ClassGenerator:
         """
         for line in file_lines:
             if line.startswith("import"):
-                self._imports.append(line)
+                self.file.append(line)
 
     def generate(self):
         """
@@ -91,22 +108,19 @@ class ClassGenerator:
 
         # Finalise self
         self.get_full_field_list()
-        file = code_generator.java.java_code_generator.JavaFile(self.class_name, self._package)
 
         # Populate the header of the file
-        file.get_core_class().extensions.append(self._json_data['extends'])
-        for line in self._imports:
-            file.imports.append(line)
+        self.file.javaClass.extensions.append(self._json_data['extends'])
 
         # Create the core class
-        java_class = file.get_core_class()
-        java_class.abstract = self._abstract
+        java_class = self.file.javaClass
+        java_class.abstract = self._json_data['abstract']
 
         # Add all code
         self._add_field_key_definitions(java_class)
         self._add_schema_method(java_class)
         self._add_min_constructor(java_class)
-        if not self._abstract:
+        if not self._json_data['abstract']:
             self._add_full_constructor(java_class)
         if self._has_general:
             self._add_general_methods(java_class)
@@ -114,129 +128,137 @@ class ClassGenerator:
         if self._has_setter:
             self._add_setters(java_class)
 
-        return file
+        return self.file
 
     def _add_field_key_definitions(self, java_class):
         # Add the prefix
-        java_class.lines.append("")
-        java_class.lines.append(
+        section = WritableSection()
+        java_class.append(section)
+
+        section.append(
             "private static final String " + self._field_prefix + " = \"" + self.class_name + "_\"")
-        java_class.lines.append("")
+        section.append("")
 
         # All all the fields
         for field in self._fields:
-            if 'use_get_name' in field and field['use_get_name']:
-                java_class.lines.append("public static final String " + field['key'] +
-                                        " = \"get" + field['name'] + "\"")
+            if field['use_get_name']:
+                section.append("public static final String " + field['key'] +
+                               " = \"get" + field['name'] + "\"")
             else:
-                java_class.lines.append("public static final String " + field['key'] +
+                section.append("public static final String " + field['key'] +
                                         " = " + self._field_prefix + " + \"" + field['name'] + "\"")
 
     def _add_schema_method(self, java_class):
         # Setup the method
-        schema_method = java_class.add_method("getDataObjectSchema")
+        schema_method = code_generator.java.java_code_generator.JavaMethod("getDataObjectSchema")
+        java_class.append(schema_method)
         schema_method.return_type = "DataObject_Schema"
         schema_method.static = True
         schema_method.comment.append("Get all the fields for this object")
 
         # Get the original schema to append
-        schema_method.lines.append(
+        schema_method.append(
             "DataObject_Schema dataObjectSchema = " + self._json_data['extendsSchema'] + ".getDataObjectSchema()")
-        schema_method.lines.append("")
+        schema_method.append("")
 
         # Add all the new fields
         for field in self._full_fields:
             if field in self._fields:
                 # for field in self._fields:
-                schema_method.lines.append(
+                schema_method.append(
                     "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
             else:
-                schema_method.lines.append("// " + field['name'])
-        schema_method.lines.append("")
+                schema_method.append("// " + field['name'])
+        schema_method.append("")
 
         self._add_field_config(schema_method)
 
         # Close the method
-        if self._abstract:
-            schema_method.lines.append("return dataObjectSchema.endLayer(" + self.class_name + ".class)")
+        if self._json_data['abstract']:
+            schema_method.append("return dataObjectSchema.endLayer(" + self.class_name + ".class)")
         else:
-            schema_method.lines.append("return dataObjectSchema.finaliseContainer(" + self.class_name + ".class)")
+            schema_method.append("return dataObjectSchema.finaliseContainer(" + self.class_name + ".class)")
 
     def _add_field_config(self, schema_method):
         any_print = False
         for field in self._fields:
-            if 'editable' in field and field['editable']:
+            if field['editable']:
                 any_print = True
                 divide_line = "// " + field['name'] + " "
                 for x in range(108 - len(field['name'])):
                     divide_line += "="
-                schema_method.lines.append(divide_line)
-                schema_method.lines.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
+                schema_method.append(divide_line)
+                schema_method.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
         if any_print:
             divide_line = "//"
             for x in range(110):
                 divide_line += "="
-            schema_method.lines.append(divide_line)
-            schema_method.lines.append("")
+            schema_method.append(divide_line)
+            schema_method.append("")
 
     def _add_min_constructor(self, java_class):
-        constructor_method = java_class.add_method(self.class_name)
+        constructor_method = JavaMethod(self.class_name)
+        java_class.append(constructor_method)
         constructor_method.comment.append("Constructor")
         constructor_method.param.append("Database database")
-        constructor_method.lines.append("super(database)")
+        constructor_method.append("super(database)")
 
     def _add_full_constructor(self, java_class):
         # Setup the method
-        full_constructor_method = java_class.add_method(self.class_name)
+        full_constructor_method = JavaMethod(self.class_name)
+        java_class.append(full_constructor_method)
         full_constructor_method.comment.append("Constructor")
         database_source = None
 
         # Setup the set call and parameters
         set_line = "setAllValues(DataObject_Id, getTrackingDatabase().getNextId()\n"
         for field in self._full_fields:
-            if not ('avoid_constructor' in field) or (not field['avoid_constructor']):
+            if not field['avoid_constructor']:
                 full_constructor_method.param.append(field['type'] + " " + field['name'].lower())
                 set_line += "                , " + field['key'] + ", " + field['name'].lower() + '\n'
-                if 'database_source' in field and field['database_source']:
+                if field['database_source']:
                     database_source = field
         set_line += "       )"
-        full_constructor_method.lines.append(set_line)
+        full_constructor_method.append(set_line)
 
         # Add the database source
         if database_source is not None:
-            full_constructor_method.lines.insert(0, "this(" + database_source['name'].lower() +
-                                                 ".getTrackingDatabase())")
+            full_constructor_method.insert(0, "this(" + database_source['name'].lower() +
+                                           ".getTrackingDatabase())")
         else:
             full_constructor_method.param.insert(0, "Database database")
-            full_constructor_method.lines.insert(0, "this(database)")
+            full_constructor_method.insert(0, "this(database)")
 
     def _add_general_methods(self, java_class):
-        java_class.add_method_divider("General")
+        java_class.append(SectionComment("General"))
         for field in self._fields:
-            if 'string_source' in field and field['string_source']:
-                to_string_method = java_class.add_method("toString")
+            if field['string_source']:
+                to_string_method = JavaMethod("toString")
+                java_class.append(to_string_method)
                 to_string_method.return_type = "String"
                 to_string_method.comment.append("@inheritDoc")
                 to_string_method.attributes.append("@Override")
 
-                to_string_method.lines.append("return get" + field['name'] + "()")
+                to_string_method.append("return get" + field['name'] + "()")
                 break
 
     def _add_getters(self, java_class):
-        java_class.add_method_divider("Getters")
+        java_class.append(SectionComment("Getters"))
         for field in self._fields:
-            getter_method = java_class.add_method("get" + field['name'])
+            getter_method = JavaMethod("get" + field['name'])
+            java_class.append(getter_method)
             getter_method.return_type = field['type']
-            getter_method.lines.append("return get(" + field['key'] + ")")
+            getter_method.append("return get(" + field['key'] + ")")
 
     def _add_setters(self, java_class):
-        java_class.add_method_divider("Setters")
+        java_class.append(SectionComment("Setters"))
         for field in self._fields:
-            if 'editable' in field and field['editable']:
-                setter_method = java_class.add_method("set" + field['name'])
+            if field['editable']:
+                setter_method = JavaMethod("set" + field['name'])
+                java_class.append(setter_method)
                 setter_method.return_type = "void"
                 setter_method.param.append(field['type'] + " " + field['name'].lower())
-                setter_method.lines.append("set(" + field['key'] + ", " + field['name'].lower() + ")")
+                setter_method.append("set(" + field['key'] + ", " + field['name'].lower() + ")")
 
 
 class RootClassGenerator:

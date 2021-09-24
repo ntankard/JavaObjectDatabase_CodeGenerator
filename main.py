@@ -61,7 +61,7 @@ def write_file(java_path, file):
     # Write the file
     with open(java_path, "w") as myFile:
         lines = []
-        file.write(lines)
+        file.write(lines, 0)
         for line in lines:
             myFile.write(line)
 
