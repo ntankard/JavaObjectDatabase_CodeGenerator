@@ -6,7 +6,7 @@ class WritableSection:
         _file_lines (list[str]):                The lines that will be written to file (set at write time)
         _tab_offset (int):                      The number of tabs that the class should be offset by, set at write time
         _sections (list[str/WritableSection]):  The lines or other sections to write
-        _code_lines (bool):                     Are the lines code (with a ;) or not (does not effect nested sections)
+        code_lines (bool):                     Are the lines code (with a ;) or not (does not effect nested sections)
     """
 
     def __init__(self):
@@ -16,7 +16,7 @@ class WritableSection:
         self._file_lines = []
         self._tab_offset = 0
         self._sections = []
-        self._code_lines = True
+        self.code_lines = True
 
     def append(self, section):
         """
@@ -66,7 +66,7 @@ class WritableSection:
             if issubclass(type(line), WritableSection):
                 line.write(self._file_lines, self._tab_offset)
             else:
-                if self._code_lines:
+                if self.code_lines:
                     self._add_code_line(line)
                 else:
                     self._add_line(line)
@@ -249,6 +249,43 @@ class SectionComment(WritableSection):
         self._add_line(line)
         self._add_line(center_line)
         self._add_line(line)
+
+
+class DividerComment(WritableSection):
+    """
+    A comment section used to divide groups of lines to write to the file
+
+    Attributes:
+        _comment (str): The comment to write
+    """
+
+    def __init__(self, comment=""):
+        """
+        Constructor
+
+        Args:
+            comment (str):         The name of the divider
+        """
+        super().__init__()
+        self._comment = comment
+
+    def write(self, file_lines, tab_offset):
+        self._file_lines = file_lines
+        self._tab_offset = tab_offset
+
+        # Method comment
+        line_size = 118 - (4 * self._tab_offset)
+        pad_size = int((line_size - (len(self._comment)))) - 2
+
+        center_line = "//"
+        if len(self._comment) != 0:
+            center_line += (" " + self._comment + " ")
+        else:
+            center_line += "=="
+        for x in range(pad_size):
+            center_line += "="
+
+        self._add_line(center_line)
 
 
 class BlockComment(WritableSection):

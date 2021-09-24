@@ -25,14 +25,17 @@ def parse_all_files(core_path, start_package):
         print(e)
         return
 
+    to_write = {}
     for java_file in java_files:
         try:
-            to_write = java_file.generate()
+            to_write[java_file] = java_file.generate()
         except Exception as e:
             traceback.print_exc()
             print(e)
             return
-        write_file(java_file.java_path, to_write)
+
+    for java_file in java_files:
+        write_file(java_file.java_path, to_write[java_file])
 
 
 def parse_file(core_name, path, package, java_files_dict):
@@ -47,7 +50,6 @@ def parse_file(core_name, path, package, java_files_dict):
     # Parse the existing file if it exists for escape code
     if os.path.isfile(java_path):
         java_file = open(java_path, )
-        java_file_lines = []
         with open(java_path, "r") as myFile:
             lines = java_file.readlines()
             lines = [line.rstrip() for line in lines]
