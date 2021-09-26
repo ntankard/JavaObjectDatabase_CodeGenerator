@@ -164,9 +164,10 @@ class JavaClass(WritableSection):
     A class to add to the file (top level or inner class TODO)
 
     Attributes:
-        _name (str):                            The name of the class
-        abstract (bool):                        True if the class is abstract
-        extensions (list[str]):                 The classes this class extends
+        _name (str):            The name of the class
+        abstract (bool):        True if the class is abstract
+        extensions (list[str]): The classes this class extends
+        implements (list[str]): The classes this class implements
     """
 
     def __init__(self, name):
@@ -179,7 +180,8 @@ class JavaClass(WritableSection):
         super().__init__()
         self._name = name
         self.abstract = False
-        self.extensions = []
+        self.extensions = None
+        self.implements = None
 
     def write(self, file_lines, tab_offset):
         self._file_lines = file_lines
@@ -196,10 +198,12 @@ class JavaClass(WritableSection):
         if self.abstract:
             class_line += "abstract "
         class_line += "class " + self._name
-        if len(self.extensions) != 0:
+        if self.extensions is not None:
             class_line += " extends "
-            for extension in self.extensions:
-                class_line += extension
+            class_line += self.extensions
+        if self.implements is not None:
+            class_line += " implements "
+            class_line += self.implements
         class_line += " {"
         self._add_line(class_line)
 

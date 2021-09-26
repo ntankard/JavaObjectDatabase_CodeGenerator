@@ -46,6 +46,8 @@ class ClassGenerator:
         # Populate optional parameters with defaults
         if 'abstract' not in self._json_data:
             self._json_data['abstract'] = False
+        if 'implements' not in self._json_data:
+            self._json_data['implements'] = None
 
         # For all fields, populate optional parameters with default
         for field in self._fields:
@@ -60,11 +62,28 @@ class ClassGenerator:
                 field['avoid_constructor'] = False
             if 'database_source' not in field:
                 field['database_source'] = False
+            if 'is_override' not in field:
+                field['is_override'] = False
+
+        if self._json_data['implements'] == "FileInterface":
+            name_found = False
+            path_found = False
+            for field in self._fields:
+                if field['name'] == "FileName":
+                    name_found = True
+                    field['is_override'] = True
+                if field['name'] == "ContainerPath":
+                    path_found = True
+                    field['is_override'] = True
+            if not name_found or not path_found:
+                raise Exception("FileInterface methods missing")
 
         # TODO remove
         for field in self._json_data['fields']:
             if field['string_source']:
                 self._has_general = True
+            if 'dataCore' in field:
+                field['avoid_constructor'] = True
 
     def get_full_field_list(self):
         """
@@ -106,7 +125,8 @@ class ClassGenerator:
         self.get_full_field_list()
 
         # Populate the header of the file
-        self.file.javaClass.extensions.append(self._json_data['extends'])
+        self.file.javaClass.extensions = self._json_data['extends']
+        self.file.javaClass.implements = self._json_data['implements']
 
         # Create the core class
         java_class = self.file.javaClass
@@ -117,12 +137,12 @@ class ClassGenerator:
         definitions = self._Definitions(self)
         properties = self._Properties(self)
         constructor = self._Constructor(self)
-
+        implements = self._Implements(self)
         getters = self._Getters(self)
         setters = self._Setters(self)
 
         # Group all sections for convenience
-        sections = [keys, definitions, properties, constructor, getters, setters]
+        sections = [keys, definitions, properties, constructor, implements, getters, setters]
         for field in self._full_fields:
             if field in self._fields:
                 for section in sections:
@@ -139,6 +159,7 @@ class ClassGenerator:
             constructor.add(java_class)
         if self._has_general:
             self._add_general_methods(java_class)
+        implements.add(java_class)
         getters.add(java_class)
         setters.add(java_class)
 
@@ -190,6 +211,7 @@ class ClassGenerator:
         def __init__(self, parent):
             self._parent = parent
             self._section = WritableSection()
+            self._prefix_needed = False
 
         def add_virtual_field(self, field):
             pass
@@ -198,14 +220,17 @@ class ClassGenerator:
             if field['use_get_name']:
                 self._section.append("public static final String " + field['key'] + " = \"get" + field['name'] + "\"")
             else:
+                self._prefix_needed = True
                 self._section.append(
                     "public static final String " + field['key'] + " = " + self._parent.field_prefix + " + \"" + field[
                         'name'] + "\"")
 
         def add(self, java_class):
-            java_class.append(
-                "private static final String " + self._parent.field_prefix + " = \"" + self._parent.class_name + "_\"")
-            java_class.append("")
+            if self._prefix_needed:
+                java_class.append(
+                    "private static final String " + self._parent.field_prefix + " = \"" +
+                    self._parent.class_name + "_\"")
+                java_class.append("")
             java_class.append(self._section)
 
     class _Definitions:
@@ -234,9 +259,23 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
+            any_used = False
+            section = WritableSection()
             if field['editable']:
-                self._section.append(DividerComment(field['name']))
-                self._section.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
+                any_used = True
+                section.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
+            if 'dataCore' in field:
+                any_used = True
+                data_core = field['dataCore']
+                if data_core['type'] == 'Static':
+                    section.append("dataObjectSchema.get(" + field[
+                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(\"" + data_core['value'] + "\"))")
+                else:
+                    raise Exception("Unknown data core")
+
+            if any_used:
+                section.insert(0, DividerComment(field['name']))
+                self._section.append(section)
 
         def add(self, method):
             if not self._section.is_empty():
@@ -256,8 +295,10 @@ class ClassGenerator:
 
         def add_field(self, field):
             if not field['avoid_constructor']:
-                self._method.param.append(field['type'] + " " + field['name'].lower())
-                self._set_line.append("        , " + field['key'] + ", " + field['name'].lower())
+                # self._database_source['name'][0].lower() + self._database_source['name'][1:]
+
+                self._method.param.append(field['type'] + " " + field['name'][0].lower() + field['name'][1:])
+                self._set_line.append("        , " + field['key'] + ", " + field['name'][0].lower() + field['name'][1:])
                 if field['database_source']:
                     self._database_source = field
 
@@ -269,8 +310,9 @@ class ClassGenerator:
 
             # Build the method
             if self._database_source is not None:
-                self._method.append("this(" + self._database_source['name'].lower() +
-                                    ".getTrackingDatabase());")
+                self._method.append(
+                    "this(" + self._database_source['name'][0].lower() + self._database_source['name'][1:] +
+                    ".getTrackingDatabase());")
             else:
                 self._method.param.insert(0, "Database database")
                 self._method.append("this(database);")
@@ -279,6 +321,28 @@ class ClassGenerator:
             self._method.append(");")
 
             java_class.append(self._method)
+
+    class _Implements:
+        def __init__(self, parent):
+            self._parent = parent
+            self._methods = WritableSection()
+
+        def add_virtual_field(self, field):
+            pass
+
+        def add_field(self, field):
+            if field['is_override']:
+                getter_method = JavaMethod("get" + field['name'])
+                getter_method.comment.append("@inheritDoc")
+                getter_method.attributes.append("@Override")
+                getter_method.return_type = field['type']
+                getter_method.append("return get(" + field['key'] + ")")
+                self._methods.append(getter_method)
+
+        def add(self, java_class):
+            if not self._methods.is_empty():
+                java_class.append(SectionComment("Implementations"))
+                java_class.append(self._methods)
 
     class _Getters:
         def __init__(self, parent):
@@ -289,10 +353,11 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
-            getter_method = JavaMethod("get" + field['name'])
-            getter_method.return_type = field['type']
-            getter_method.append("return get(" + field['key'] + ")")
-            self._methods.append(getter_method)
+            if not field['is_override']:
+                getter_method = JavaMethod("get" + field['name'])
+                getter_method.return_type = field['type']
+                getter_method.append("return get(" + field['key'] + ")")
+                self._methods.append(getter_method)
 
         def add(self, java_class):
             java_class.append(SectionComment("Getters"))
@@ -310,8 +375,8 @@ class ClassGenerator:
             if field['editable']:
                 setter_method = JavaMethod("set" + field['name'])
                 setter_method.return_type = "void"
-                setter_method.param.append(field['type'] + " " + field['name'].lower())
-                setter_method.append("set(" + field['key'] + ", " + field['name'].lower() + ")")
+                setter_method.param.append(field['type'] + " " + field['name'][0].lower() + field['name'][1:])
+                setter_method.append("set(" + field['key'] + ", " + field['name'][0].lower() + field['name'][1:] + ")")
                 self._methods.append(setter_method)
 
         def add(self, java_class):
