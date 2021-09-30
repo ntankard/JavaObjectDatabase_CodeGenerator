@@ -13,7 +13,6 @@ class ClassGenerator:
         java_path (str):                    The path of the file
         field_prefix (str):                The main class of the file matching the name of the file
         _fields (list[dict]):               The fields to be writen
-        _has_general (bool)                 Does this class have any additional general methods
         _class_dict (dict{ClassGenerator}): A dict containing all ClassGenerator found in the package mapped to there
                                             class name
         _follow_field (dict)                The field that any new fields should follow to maintain the intended order
@@ -36,7 +35,6 @@ class ClassGenerator:
         self.java_path = java_path
         self.field_prefix = self.class_name + "_Prefix"
         self._fields = self._json_data['fields']
-        self._has_general = False
         self._class_dict = class_dict
         self._follow_field = None
         self._full_fields = []
@@ -64,8 +62,8 @@ class ClassGenerator:
                 field['database_source'] = False
             if 'is_override' not in field:
                 field['is_override'] = False
-            if 'can_be_null' not in field:
-                field['can_be_null'] = False
+            if 'canBeNull' not in field:
+                field['canBeNull'] = False
 
         if self._json_data['implements'] == "FileInterface":
             name_found = False
@@ -82,8 +80,6 @@ class ClassGenerator:
 
         # TODO remove
         for field in self._json_data['fields']:
-            if field['string_source']:
-                self._has_general = True
             if 'dataCore' in field:
                 field['avoid_constructor'] = True
 
@@ -159,8 +155,7 @@ class ClassGenerator:
         self._add_min_constructor(java_class)
         if not self._json_data['abstract']:
             constructor.add(java_class)
-        if self._has_general:
-            self._add_general_methods(java_class)
+        self._add_general_methods(java_class)
         implements.add(java_class)
         getters.add(java_class)
         setters.add(java_class)
@@ -198,16 +193,29 @@ class ClassGenerator:
         constructor_method.append("super(database)")
 
     def _add_general_methods(self, java_class):
-        java_class.append(SectionComment("General"))
-        for field in self._fields:
-            if field['string_source']:
-                to_string_method = JavaMethod("toString")
-                java_class.append(to_string_method)
-                to_string_method.return_type = "String"
-                to_string_method.comment.append("@inheritDoc")
-                to_string_method.attributes.append("@Override")
-                to_string_method.append("return get" + field['name'] + "()")
-                break
+        section = WritableSection()
+
+        if 'customToString' in self._json_data:
+            to_string_method = JavaMethod("toString")
+            to_string_method.return_type = "String"
+            to_string_method.comment.append("@inheritDoc")
+            to_string_method.attributes.append("@Override")
+            to_string_method.append("return " + self._json_data['customToString'])
+            section.append(to_string_method)
+        else:
+            for field in self._fields:
+                if field['string_source']:
+                    to_string_method = JavaMethod("toString")
+                    to_string_method.return_type = "String"
+                    to_string_method.comment.append("@inheritDoc")
+                    to_string_method.attributes.append("@Override")
+                    to_string_method.append("return get" + field['name'] + "()")
+                    section.append(to_string_method)
+                    break
+
+        if not section.is_empty():
+            java_class.append(SectionComment("General"))
+            java_class.append(section)
 
     class _Keys:
         def __init__(self, parent):
@@ -245,7 +253,7 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
-            if field['can_be_null']:
+            if field['canBeNull']:
                 self._section.append("dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field[
                     'type'] + ".class, true))")
             else:
