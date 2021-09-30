@@ -64,6 +64,8 @@ class ClassGenerator:
                 field['database_source'] = False
             if 'is_override' not in field:
                 field['is_override'] = False
+            if 'can_be_null' not in field:
+                field['can_be_null'] = False
 
         if self._json_data['implements'] == "FileInterface":
             name_found = False
@@ -243,8 +245,12 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
-            self._section.append(
-                "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
+            if field['can_be_null']:
+                self._section.append("dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field[
+                    'type'] + ".class, true))")
+            else:
+                self._section.append(
+                    "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
 
         def add(self, method):
             self._section.append("")
