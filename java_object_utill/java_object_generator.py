@@ -107,9 +107,21 @@ class ClassGenerator:
         Args:
             file_lines (list[str]): The lines of the previously generated file
         """
+        add_blank = False
+        imports_start = False
         for line in file_lines:
             if line.startswith("import"):
+                imports_start = True
+                if add_blank:
+                    self.file.append("")
+                    add_blank = False
                 self.file.append(line)
+            elif line == "":
+                if imports_start:
+                    add_blank = True
+            else:
+                if imports_start:
+                    break
 
     def generate(self):
         """
@@ -284,6 +296,23 @@ class ClassGenerator:
                 if data_core['type'] == 'Static':
                     section.append("dataObjectSchema.get(" + field[
                         'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(\"" + data_core['value'] + "\"))")
+                elif data_core['type'] == 'Derived':
+                    data_core_section = WritableSection()
+                    i = 0
+                    data_core_section.code_lines = False
+                    data_core_section.append(
+                        "dataObjectSchema.<" + field['type'] + ">get(" + field['key'] + ").setDataCore_schema(")
+                    data_core_section.append(
+                        "    new Derived_DataCore_Schema<" + field['type'] + ", " + self._parent.class_name + ">")
+                    data_core_section.append("        (container ->" + data_core['codeLine'])
+                    for source in data_core['sources']:
+                        line = "            , makeSourceChain(" + source + ")"
+                        i += 1
+                        if i == len(data_core['sources']):
+                            line += "));"
+                        data_core_section.append(line)
+
+                    section.append(data_core_section)
                 else:
                     raise Exception("Unknown data core")
 
