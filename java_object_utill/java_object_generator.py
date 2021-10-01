@@ -68,6 +68,7 @@ class ClassGenerator:
         if self._json_data['implements'] == "FileInterface":
             name_found = False
             path_found = False
+            full_path_found = False
             for field in self._fields:
                 if field['name'] == "FileName":
                     name_found = True
@@ -75,7 +76,10 @@ class ClassGenerator:
                 if field['name'] == "ContainerPath":
                     path_found = True
                     field['is_override'] = True
-            if not name_found or not path_found:
+                if field['name'] == "FullPath":
+                    full_path_found = True
+                    field['is_override'] = True
+            if not name_found or not path_found or not full_path_found:
                 raise Exception("FileInterface methods missing")
 
         # TODO remove
@@ -303,10 +307,10 @@ class ClassGenerator:
                     data_core_section.append(
                         "dataObjectSchema.<" + field['type'] + ">get(" + field['key'] + ").setDataCore_schema(")
                     data_core_section.append(
-                        "    new Derived_DataCore_Schema<" + field['type'] + ", " + self._parent.class_name + ">")
-                    data_core_section.append("        (container ->" + data_core['codeLine'])
+                        "        new Derived_DataCore_Schema<" + field['type'] + ", " + self._parent.class_name + ">")
+                    data_core_section.append("                (container -> " + data_core['codeLine'])
                     for source in data_core['sources']:
-                        line = "            , makeSourceChain(" + source + ")"
+                        line = "                        , makeSourceChain(" + source + ")"
                         i += 1
                         if i == len(data_core['sources']):
                             line += "));"
