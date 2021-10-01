@@ -46,6 +46,8 @@ class ClassGenerator:
             self._json_data['abstract'] = False
         if 'implements' not in self._json_data:
             self._json_data['implements'] = None
+        if 'listDef' not in self._json_data:
+            self._json_data['listDef'] = False
 
         # For all fields, populate optional parameters with default
         for field in self._fields:
@@ -64,6 +66,15 @@ class ClassGenerator:
                 field['is_override'] = False
             if 'canBeNull' not in field:
                 field['canBeNull'] = False
+            if 'type' not in field:
+                if 'listType' not in field:
+                    raise Exception("Either type or listType must be declared in the JSON file")
+                field['type'] = field['listType'] + "List"
+                field['getType'] = "List<" + field['listType'] + ">"
+            else:
+                field['getType'] = field['type']
+            if 'fieldType' not in field:
+                field['fieldType'] = "DataField_Schema"
 
         if self._json_data['implements'] == "FileInterface":
             name_found = False
@@ -166,9 +177,17 @@ class ClassGenerator:
                     section.add_virtual_field(field)
 
         # Add all code
+        if self._json_data['listDef']:
+            list_def_section = WritableSection()
+            list_def_section.code_lines = False
+            list_def_section.append(
+                "public interface " + self.class_name + "List extends List<" + self.class_name + "> {")
+            list_def_section.append("}")
+            java_class.append(list_def_section)
         keys.add(java_class)
         self._add_schema_method(java_class, definitions, properties)
-        self._add_min_constructor(java_class)
+        if not constructor.set_line.is_empty():
+            self._add_min_constructor(java_class)
         if not self._json_data['abstract']:
             constructor.add(java_class)
         self._add_general_methods(java_class)
@@ -270,11 +289,13 @@ class ClassGenerator:
 
         def add_field(self, field):
             if field['canBeNull']:
-                self._section.append("dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field[
-                    'type'] + ".class, true))")
+                self._section.append(
+                    "dataObjectSchema.add(new " + field['fieldType'] + "<>(" + field['key'] + ", " + field[
+                        'type'] + ".class, true))")
             else:
                 self._section.append(
-                    "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field['type'] + ".class))")
+                    "dataObjectSchema.add(new " + field['fieldType'] + "<>(" + field['key'] + ", " + field[
+                        'type'] + ".class))")
 
         def add(self, method):
             self._section.append("")
@@ -317,6 +338,15 @@ class ClassGenerator:
                         data_core_section.append(line)
 
                     section.append(data_core_section)
+                elif data_core['type'] == 'SelfParent':
+                    data_core_section = WritableSection()
+                    data_core_section.code_lines = False
+
+                    data_core_section.append(
+                        "dataObjectSchema.<" + field['getType'] + ">get(" + field['key'] + ").setDataCore_schema(")
+                    data_core_section.append(
+                        "        createSelfParentList(" + data_core['classType'] + ".class, null));")
+                    section.append(data_core_section)
                 else:
                     raise Exception("Unknown data core")
 
@@ -334,7 +364,7 @@ class ClassGenerator:
         def __init__(self, parent):
             self._parent = parent
             self._method = JavaMethod(self._parent.class_name)
-            self._set_line = WritableSection()
+            self.set_line = WritableSection()
             self._database_source = None
 
         def add_virtual_field(self, field):
@@ -345,13 +375,16 @@ class ClassGenerator:
                 # self._database_source['name'][0].lower() + self._database_source['name'][1:]
 
                 self._method.param.append(field['type'] + " " + field['name'][0].lower() + field['name'][1:])
-                self._set_line.append("        , " + field['key'] + ", " + field['name'][0].lower() + field['name'][1:])
+                self.set_line.append("        , " + field['key'] + ", " + field['name'][0].lower() + field['name'][1:])
                 if field['database_source']:
                     self._database_source = field
 
         def add(self, java_class):
+            # if self._set_line.is_empty():
+            #     return
+
             # Setup the sections
-            self._set_line.code_lines = False
+            self.set_line.code_lines = False
             self._method.code_lines = False
             self._method.comment.append("Constructor")
 
@@ -362,9 +395,12 @@ class ClassGenerator:
                     ".getTrackingDatabase());")
             else:
                 self._method.param.insert(0, "Database database")
-                self._method.append("this(database);")
+                if self.set_line.is_empty():
+                    self._method.append("super(database);")
+                else:
+                    self._method.append("this(database);")
             self._method.append("setAllValues(DataObject_Id, getTrackingDatabase().getNextId()")
-            self._method.append(self._set_line)
+            self._method.append(self.set_line)
             self._method.append(");")
 
             java_class.append(self._method)
@@ -402,7 +438,7 @@ class ClassGenerator:
         def add_field(self, field):
             if not field['is_override']:
                 getter_method = JavaMethod("get" + field['name'])
-                getter_method.return_type = field['type']
+                getter_method.return_type = field['getType']
                 getter_method.append("return get(" + field['key'] + ")")
                 self._methods.append(getter_method)
 
