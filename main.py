@@ -39,13 +39,15 @@ def parse_all_files(core_path, start_package):
 
 
 def parse_file(core_name, path, package, java_files_dict):
-    java_path = os.path.join(path, core_name + ".java")
+    java_root = path.replace("\\json", "")
+
+    java_path = os.path.join(java_root, core_name + ".java")
     json_path = os.path.join(path, core_name + ".json")
 
     # Open the file and parse the JSON data
     f = open(json_path, )
     data = json.load(f)
-    gen = ClassGenerator(data, core_name, package, java_path, java_files_dict)
+    gen = ClassGenerator(data, core_name, package.replace(".json", ""), java_path, java_files_dict)
 
     # Parse the existing file if it exists for escape code
     if os.path.isfile(java_path):

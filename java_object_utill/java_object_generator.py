@@ -443,8 +443,9 @@ class ClassGenerator:
                 self._methods.append(getter_method)
 
         def add(self, java_class):
-            java_class.append(SectionComment("Getters"))
-            java_class.append(self._methods)
+            if not self._methods.is_empty():
+                java_class.append(SectionComment("Getters"))
+                java_class.append(self._methods)
 
     class _Setters:
         def __init__(self, parent):
