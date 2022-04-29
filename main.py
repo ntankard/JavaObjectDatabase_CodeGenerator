@@ -2,21 +2,25 @@ import json
 import os
 import sys
 import traceback
+from jsonschema import validate
 
 from java_object_utill.java_object_generator import ClassGenerator, RootClassGenerator
 
 
-def parse_all_files(core_path, start_package):
+def parse_all_files(core_path, start_package, schema_path):
     try:
         java_files = []
         java_files_dict = {'Displayable_DataObject': RootClassGenerator()}
+
+        f = open(schema_path, )
+        schema = json.load(f)
 
         for path, subdir, files in os.walk(core_path):
             for name in files:
                 core_name, extension = os.path.splitext(name)
                 if extension == ".json":
                     file = parse_file(core_name, path, start_package + path.replace(core_path, "").replace('\\', '.'),
-                                      java_files_dict)
+                                      java_files_dict, schema)
                     java_files.append(file)
                     java_files_dict[file.class_name] = file
 
@@ -38,7 +42,7 @@ def parse_all_files(core_path, start_package):
         write_file(java_file.java_path, to_write[java_file])
 
 
-def parse_file(core_name, path, package, java_files_dict):
+def parse_file(core_name, path, package, java_files_dict, schema):
     java_root = path.replace("\\json", "")
 
     java_path = os.path.join(java_root, core_name + ".java")
@@ -47,6 +51,7 @@ def parse_file(core_name, path, package, java_files_dict):
     # Open the file and parse the JSON data
     f = open(json_path, )
     data = json.load(f)
+    validate(instance=data, schema=schema)
     gen = ClassGenerator(data, core_name, package.replace(".json", ""), java_path, java_files_dict)
 
     # Parse the existing file if it exists for escape code
@@ -74,11 +79,12 @@ def write_file(java_path, file):
 if __name__ == '__main__':
     _start_package = ""
     _core_path = ""
-    if len(sys.argv) == 3:
+    if len(sys.argv) == 4:
         _start_package = sys.argv[1]
         _core_path = sys.argv[2]
+        _schema_path = sys.argv[3]
     else:
         print("Both a path to the folder to parse and a core path must be provided")
         exit(2)
 
-    parse_all_files(_core_path, _start_package)
+    parse_all_files(_core_path, _start_package, _schema_path)

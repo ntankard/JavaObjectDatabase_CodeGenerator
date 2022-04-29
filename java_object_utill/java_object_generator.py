@@ -66,6 +66,8 @@ class ClassGenerator:
                 field['is_override'] = False
             if 'canBeNull' not in field:
                 field['canBeNull'] = False
+            if 'is_list' not in field:
+                field['is_list'] = False
             if 'type' not in field:
                 if 'listType' not in field:
                     raise Exception("Either type or listType must be declared in the JSON file")
@@ -108,7 +110,7 @@ class ClassGenerator:
         """
         if self._follow_field is None:
             self._follow_field, self._full_fields = self._class_dict[
-                self._json_data['extendsSchema']].get_full_field_list()
+                self._json_data['extends']].get_full_field_list()
             for field in self._fields:
                 self._full_fields.insert(self._full_fields.index(self._follow_field) + 1, field)
                 self._follow_field = field
@@ -183,6 +185,7 @@ class ClassGenerator:
             list_def_section.append(
                 "public interface " + self.class_name + "List extends List<" + self.class_name + "> {")
             list_def_section.append("}")
+            list_def_section.append("")
             java_class.append(list_def_section)
         keys.add(java_class)
         self._add_schema_method(java_class, definitions, properties)
@@ -207,7 +210,7 @@ class ClassGenerator:
 
         # Get the original schema to append
         schema_method.append(
-            "DataObject_Schema dataObjectSchema = " + self._json_data['extendsSchema'] + ".getDataObjectSchema()")
+            "DataObject_Schema dataObjectSchema = " + self._json_data['extends'] + ".getDataObjectSchema()")
         schema_method.append("")
 
         # Populate the definitions and properties as needed
@@ -225,7 +228,8 @@ class ClassGenerator:
         java_class.append(constructor_method)
         constructor_method.comment.append("Constructor")
         constructor_method.param.append("Database database")
-        constructor_method.append("super(database)")
+        constructor_method.param.append("Object... args")
+        constructor_method.append("super(database, args)")
 
     def _add_general_methods(self, java_class):
         section = WritableSection()
@@ -289,13 +293,23 @@ class ClassGenerator:
 
         def add_field(self, field):
             if field['canBeNull']:
-                self._section.append(
-                    "dataObjectSchema.add(new " + field['fieldType'] + "<>(" + field['key'] + ", " + field[
-                        'type'] + ".class, true))")
+                if field['is_list']:
+                    self._section.append(
+                        "dataObjectSchema.add(new ListDataField_Schema<>(" + field['key'] + ", " + field[
+                            'type'] + "List.class, true))")
+                else:
+                    self._section.append(
+                        "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field[
+                            'type'] + ".class, true))")
             else:
-                self._section.append(
-                    "dataObjectSchema.add(new " + field['fieldType'] + "<>(" + field['key'] + ", " + field[
-                        'type'] + ".class))")
+                if field['is_list']:
+                    self._section.append(
+                        "dataObjectSchema.add(new ListDataField_Schema<>(" + field['key'] + ", " + field[
+                            'type'] + "List.class))")
+                else:
+                    self._section.append(
+                        "dataObjectSchema.add(new DataField_Schema<>(" + field['key'] + ", " + field[
+                            'type'] + ".class))")
 
         def add(self, method):
             self._section.append("")
@@ -312,16 +326,25 @@ class ClassGenerator:
         def add_field(self, field):
             any_used = False
             section = WritableSection()
+            if 'properties' in field:
+                any_used = True
+                properties = field['properties']
+                for key in properties:
+                    for value in properties[key]:
+                        section.append(
+                            "dataObjectSchema.get(" + field['key'] + ").getProperty(" + key + ".class)." + value)
             if field['editable']:
                 any_used = True
                 section.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
             if 'dataCore' in field:
                 any_used = True
                 data_core = field['dataCore']
-                if data_core['type'] == 'Static':
+                if 'static' in data_core:
+                    static = data_core['static']
                     section.append("dataObjectSchema.get(" + field[
-                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(\"" + data_core['value'] + "\"))")
-                elif data_core['type'] == 'Derived':
+                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(\"" + static['value'] + "\"))")
+                elif 'derived' in data_core:
+                    derived = data_core['derived']
                     data_core_section = WritableSection()
                     i = 0
                     data_core_section.code_lines = False
@@ -329,23 +352,60 @@ class ClassGenerator:
                         "dataObjectSchema.<" + field['type'] + ">get(" + field['key'] + ").setDataCore_schema(")
                     data_core_section.append(
                         "        new Derived_DataCore_Schema<" + field['type'] + ", " + self._parent.class_name + ">")
-                    data_core_section.append("                (container -> " + data_core['codeLine'])
-                    for source in data_core['sources']:
-                        line = "                        , makeSourceChain(" + source + ")"
+                    data_core_section.append("                (container -> " + derived['codeLine'])
+                    for source in derived['sources']:
+                        line = "                        , " + source
                         i += 1
-                        if i == len(data_core['sources']):
+                        if i == len(derived['sources']):
                             line += "));"
                         data_core_section.append(line)
 
                     section.append(data_core_section)
-                elif data_core['type'] == 'SelfParent':
+                elif 'selfParent' in data_core:
+                    self_parent = data_core['selfParent']
+                    data_core_section = WritableSection()
+                    data_core_section.code_lines = False
+
+                    data_core_section.append(
+                        "dataObjectSchema.<List<" + field['getType'] + ">>get(" + field[
+                            'key'] + ").setDataCore_schema(")
+                    data_core_section.append(
+                        "        createSelfParentList(" + self_parent['classType'] + ".class, null));")
+                    section.append(data_core_section)
+                elif 'directDerived' in data_core:
+                    direct_derived = data_core['directDerived']
                     data_core_section = WritableSection()
                     data_core_section.code_lines = False
 
                     data_core_section.append(
                         "dataObjectSchema.<" + field['getType'] + ">get(" + field['key'] + ").setDataCore_schema(")
+                    if "defaultValue" in direct_derived:
+                        data_core_section.append(
+                            "        createDefaultDirectDerivedDataCore(" + str(direct_derived['defaultValue']) + ",")
+                        data_core_section.append("                " + direct_derived['sources'] + "));")
+                    elif "defaultGetter" in direct_derived:
+                        data_core_section.append(
+                            "        createDefaultDirectDerivedDataCoreGetter(" + str(
+                                direct_derived['defaultGetter']) + ",")
+                        data_core_section.append("                " + direct_derived['sources'] + "));")
+                    else:
+                        data_core_section.append(
+                            "        createDirectDerivedDataCore(" + direct_derived['sources'] + "));")
+                    section.append(data_core_section)
+                elif 'multiParentList' in data_core:
+                    multi_parent_list = data_core['multiParentList']
+                    data_core_section = WritableSection()
+                    data_core_section.code_lines = False
+
                     data_core_section.append(
-                        "        createSelfParentList(" + data_core['classType'] + ".class, null));")
+                        "dataObjectSchema.<List<" + field['getType'] + ">>get(" + field[
+                            'key'] + ").setDataCore_schema(")
+                    # if "default" in data_core:
+                    data_core_section.append(
+                        "        createMultiParentList(" + field['getType'] + ".class, " + str(
+                            multi_parent_list['parents']) + "));")
+                    # else:
+                    #     data_core_section.append("        createDirectDerivedDataCore(" + data_core['sources'] + "));")
                     section.append(data_core_section)
                 else:
                     raise Exception("Unknown data core")
@@ -391,15 +451,12 @@ class ClassGenerator:
             # Build the method
             if self._database_source is not None:
                 self._method.append(
-                    "this(" + self._database_source['name'][0].lower() + self._database_source['name'][1:] +
-                    ".getTrackingDatabase());")
+                    "super(" + self._database_source['name'][0].lower() + self._database_source['name'][1:] +
+                    ".getTrackingDatabase()")
             else:
                 self._method.param.insert(0, "Database database")
-                if self.set_line.is_empty():
-                    self._method.append("super(database);")
-                else:
-                    self._method.append("this(database);")
-            self._method.append("setAllValues(DataObject_Id, getTrackingDatabase().getNextId()")
+                self._method.append("super(database")
+            # self._method.append("setAllValues(DataObject_Id, getTrackingDatabase().getNextId()")
             self._method.append(self.set_line)
             self._method.append(");")
 
@@ -438,7 +495,10 @@ class ClassGenerator:
         def add_field(self, field):
             if not field['is_override']:
                 getter_method = JavaMethod("get" + field['name'])
-                getter_method.return_type = field['getType']
+                if field['is_list']:
+                    getter_method.return_type = "List<" + field['getType'] + ">"
+                else:
+                    getter_method.return_type = field['getType']
                 getter_method.append("return get(" + field['key'] + ")")
                 self._methods.append(getter_method)
 
