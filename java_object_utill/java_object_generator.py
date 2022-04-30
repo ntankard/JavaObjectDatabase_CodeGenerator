@@ -52,8 +52,6 @@ class ClassGenerator:
         # For all fields, populate optional parameters with default
         for field in self._fields:
             field['key'] = class_name + "_" + field['name']
-            if 'use_get_name' not in field:
-                field['use_get_name'] = False
             if 'string_source' not in field:
                 field['string_source'] = False
             if 'editable' not in field:
@@ -266,9 +264,6 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
-            if field['use_get_name']:
-                self._section.append("public static final String " + field['key'] + " = \"get" + field['name'] + "\"")
-            else:
                 self._prefix_needed = True
                 self._section.append(
                     "public static final String " + field['key'] + " = " + self._parent.field_prefix + " + \"" + field[
@@ -328,7 +323,7 @@ class ClassGenerator:
             section = WritableSection()
             if 'properties' in field:
                 any_used = True
-                properties = field['properties']
+                properties = field['attachedProperties']
                 for key in properties:
                     for value in properties[key]:
                         section.append(
@@ -541,11 +536,9 @@ class RootClassGenerator:
         self._fields = []
         self._fields.append({'name': "ID",
                              'type': "Integer",
-                             'use_get_name': True,
                              'avoid_constructor': True})
         self._fields.append({'name': "Children",
                              'type': "DataObjectList",
-                             'use_get_name': True,
                              'avoid_constructor': True})
 
         self._follow_field = self._fields[0]
