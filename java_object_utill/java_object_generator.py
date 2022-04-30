@@ -321,7 +321,7 @@ class ClassGenerator:
         def add_field(self, field):
             any_used = False
             section = WritableSection()
-            if 'properties' in field:
+            if 'attachedProperties' in field:
                 any_used = True
                 properties = field['attachedProperties']
                 for key in properties:
