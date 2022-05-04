@@ -337,7 +337,7 @@ class ClassGenerator:
                 if 'static' in data_core:
                     static = data_core['static']
                     section.append("dataObjectSchema.get(" + field[
-                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(\"" + static['value'] + "\"))")
+                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(" + static['value'] + "))")
                 elif 'derived' in data_core:
                     derived = data_core['derived']
                     data_core_section = WritableSection()
@@ -531,8 +531,8 @@ class RootClassGenerator:
     ClassGenerator for documentation
     """
 
-    def __init__(self):
-        self._class_name = "Displayable_DataObject"
+    def __init__(self, class_name):
+        self._class_name = class_name
         self._fields = []
         self._fields.append({'name': "ID",
                              'type': "Integer",

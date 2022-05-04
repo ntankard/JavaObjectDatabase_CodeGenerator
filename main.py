@@ -10,7 +10,8 @@ from java_object_utill.java_object_generator import ClassGenerator, RootClassGen
 def parse_all_files(core_path, start_package, schema_path):
     try:
         java_files = []
-        java_files_dict = {'Displayable_DataObject': RootClassGenerator()}
+        java_files_dict = {'Displayable_DataObject': RootClassGenerator("Displayable_DataObject"),
+                           'DataObject': RootClassGenerator("DataObject")}
 
         f = open(schema_path, )
         schema = json.load(f)
