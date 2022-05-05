@@ -66,6 +66,10 @@ class ClassGenerator:
                 field['canBeNull'] = False
             if 'is_list' not in field:
                 field['is_list'] = False
+            if 'isDefault' not in field:
+                field['isDefault'] = False
+            if 'isSpecial' not in field:
+                field['isSpecial'] = False
             if 'type' not in field:
                 if 'listType' not in field:
                     raise Exception("Either type or listType must be declared in the JSON file")
@@ -331,6 +335,12 @@ class ClassGenerator:
             if field['editable']:
                 any_used = True
                 section.append("dataObjectSchema.get(" + field['key'] + ").setManualCanEdit(true)")
+            if field['isDefault']:
+                any_used = True
+                section.append("dataObjectSchema.get(" + field['key'] + ").setDefaultFlag(true)")
+            if field['isSpecial']:
+                any_used = True
+                section.append("dataObjectSchema.get(" + field['key'] + ").setSpecialFlag(true)")
             if 'dataCore' in field:
                 any_used = True
                 data_core = field['dataCore']
