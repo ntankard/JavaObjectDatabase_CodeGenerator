@@ -1,0 +1,397 @@
+{
+  "type": "object",
+  "default": {},
+  "title": "Root Schema",
+  "required": [
+    "extends",
+    "fields"
+  ],
+  "properties": {
+    "extends": {
+      "type": "string",
+      "default": "",
+      "title": "The extends Schema",
+      "examples": [
+        "DataObject"
+      ]
+    },
+    "implements": {
+      "type": "string",
+      "default": "",
+      "title": "A coma separated list of all the classes this object implements",
+      "examples": [
+        "CurrencyBound"
+      ]
+    },
+    "abstract": {
+      "type": "boolean",
+      "default": false,
+      "title": "True if this is an abstract object",
+      "examples": [
+        true
+      ]
+    },
+    "listDef": {
+      "type": "boolean",
+      "default": false,
+      "title": "Should a List<T> be defined for this object type (used if this object will be part of a list field in another object)",
+      "examples": [
+        true
+      ]
+    },
+    "customToString": {
+      "type": "string",
+      "default": "",
+      "title": "Custom code that will populate the toString method",
+      "examples": [
+        "getCoreLine().getRawLine()"
+      ]
+    },
+    "fields": {
+      "type": "array",
+      "default": [],
+      "title": "All the fields added to the object at this layer",
+      "items": {
+        "type": "object",
+        "title": "A Schema",
+        "required": [
+          "name",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "The name of the field. This name must be unique to this object at this layer. (The object will be added as a prefix automatically, it does not need to be listed here)",
+            "examples": [
+              "Value",
+              "Description",
+              "Currency"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "title": "The class type of the field. If the field is a list type then this should be the type in the list, not the full type including the list",
+            "examples": [
+              "Double",
+              "String",
+              "DataObject"
+            ]
+          },
+          "is_list": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field is of type List",
+            "examples": [
+              true
+            ]
+          },
+          "canBeNull": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if the field can have a null value",
+            "examples": [
+              true
+            ]
+          },
+          "editable": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field can be manually editable by the user. If this is true a dataCore can not be set",
+            "examples": [
+              true
+            ]
+          },
+          "database_source": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field can be used as the source of the core database. canBeNull must be false for this to be true. This field must be of a type that extends DataObject for this to be true",
+            "examples": [
+              true
+            ]
+          },
+          "string_source": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field is the sole source of the field toString property",
+            "examples": [
+              true
+            ]
+          },
+          "avoid_constructor": {
+            "type": "boolean",
+            "default": false,
+            "title": "Force a field to not be added as a parameter to a constructor ",
+            "examples": [
+              true
+            ]
+          },
+          "isDefault": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field indicates if this instance of the object type is the system default. Must be attached to a Boolean type Field and must not be editable from a data core or manualy"
+          },
+          "isSpecial": {
+            "type": "boolean",
+            "default": false,
+            "title": "True if this field indicates if this instance of the object type is a special instance. Must be attached to a Boolean type Field and must not be editable from a data core or manualy"
+          },
+          "attachedProperties": {
+            "type": "object",
+            "title": "A set of objects representing values to set in custom properties attached to the field. The object name should match the properties class name and then any internal fields should mate the properties to set",
+            "required": [
+              "Display_Properties"
+            ],
+            "examples": [
+              {
+                "Display_Properties": [
+                  "setVerbosityLevel(Display_Properties.INFO_DISPLAY)"
+                ]
+              },
+              {
+                "Display_Properties": [
+                  "setDataType(CURRENCY)"
+                ]
+              },
+              {
+                "Display_Properties": [
+                  "setCustomColor((rowObject, value) -> ((StatementTransaction)rowObject).getPeriod() == ((StatementTransaction)rowObject).getStatementFolder().getPeriod() ? null : Color.ORANGE)"
+                ]
+              }
+            ]
+          },
+          "dataCore": {
+            "type": "object",
+            "title": "The DataCore to attach to this field. Only one object can be provided here. If a DataCore is provided canBeNull must be false (default)",
+            "properties": {
+              "static": {
+                "type": "object",
+                "title": "A Static DataCore",
+                "required": [
+                  "value"
+                ],
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "title": "The static value to set"
+                  }
+                },
+                "additionalItems": false,
+                "additionalProperties": false,
+                "examples": [
+                  {
+                    "static": {
+                      "value": "Receipts"
+                    }
+                  }
+                ]
+              },
+              "derived": {
+                "type": "object",
+                "title": "A Derived data core",
+                "required": [
+                  "codeLine",
+                  "sources"
+                ],
+                "properties": {
+                  "codeLine": {
+                    "type": "string",
+                    "title": "The code to execute to calculate the derived value"
+                  },
+                  "sources": {
+                    "type": "array",
+                    "title": "A list of complected source objects pointing to the data the value will be derived from. This needs to be the full source constructor and not just the field name",
+                    "items": {
+                      "type": "string",
+                      "title": "An individual constructed source object",
+                      "examples": [
+                        "makeSourceChain(StatementTransaction_TransactionLines)",
+                        "Source_Factory.append(Source_Factory.makeSharedStepSourceChain(StatementTransaction_TranslationList, Translation_Original, Translation_Translated)\n                                , makeSourceChain(StatementTransaction_Description))"
+                      ]
+                    }
+                  }
+                },
+                "additionalItems": false,
+                "additionalProperties": false,
+                "examples": [
+                  {
+                    "derived": {
+                      "codeLine": "container.getTransactionLines().size() == 0 ? null : container.getTransactionLines().get(0)",
+                      "sources": [
+                        "makeSourceChain(StatementTransaction_TransactionLines)"
+                      ]
+                    }
+                  },
+                  {
+                    "derived": {
+                      "codeLine": "container.getTrackingDatabase().getFilesPath() + \"\\\\\" + container.getContainerPath() + \"\\\\\" + container.getFileName()",
+                      "sources": [
+                        "makeSourceChain(Receipt_ContainerPath)",
+                        "makeSourceChain(Receipt_FileName)"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "selfParent": {
+                "type": "object",
+                "title": "A SelfParent DataCore, can only be used for a list type field",
+                "required": [
+                  "classType"
+                ],
+                "properties": {
+                  "classType": {
+                    "type": "string",
+                    "default": "",
+                    "title": "The type of object to populate the list with",
+                    "examples": [
+                      "DataObject"
+                    ]
+                  }
+                },
+                "additionalItems": false,
+                "additionalProperties": false,
+                "examples": [
+                  {
+                    "selfParent": {
+                      "classType": "DataObject"
+                    }
+                  }
+                ]
+              },
+              "directDerived": {
+                "type": "object",
+                "title": "A DirectDerived DataCore",
+                "required": [
+                  "sources"
+                ],
+                "properties": {
+                  "defaultValue": {
+                    "type": [
+                      "number",
+                      "string"
+                    ],
+                    "title": "The default value to set before a value can be calculated"
+                  },
+                  "defaultGetter": {
+                    "type": "string",
+                    "title": "A function to get the default value before a value can be calculated",
+                    "examples": [
+                      "container -> container.getTrackingDatabase().getDefault(Currency.class)",
+                      "container -> container.getTrackingDatabase().getDefault(Bank.class)",
+                      "container -> container.getTrackingDatabase().getDefault(Period.class)",
+                      "container -> container.getTrackingDatabase().getDefault(TranslationTypes.class)"
+                    ]
+                  },
+                  "sources": {
+                    "type": "string",
+                    "title": "An coma separated list of fields leading to the field this field takes a value from",
+                    "examples": [
+                      "StatementTransaction_CoreLine, TransactionLine_Value",
+                      "StatementTransaction_CoreLine, TransactionLine_Description",
+                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank, Bank_Currency",
+                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank",
+                      "StatementTransaction_CoreLine, TransactionLine_Period",
+                      "StatementTransaction_StatementFolder, StatementFolder_TranslationTypes"
+                    ]
+                  }
+                },
+                "additionalItems": false,
+                "additionalProperties": false
+              },
+              "multiParentList": {
+                "type": "object",
+                "default": {},
+                "title": "A MultiParentList DataCore",
+                "required": [
+                  "parents"
+                ],
+                "properties": {
+                  "parents": {
+                    "type": "string",
+                    "default": "",
+                    "title": "A coma separated list of the fields that contain the parents for the list (can be just 1)",
+                    "examples": [
+                      "StatementTransaction_TranslationTypes"
+                    ]
+                  }
+                },
+                "additionalItems": false,
+                "additionalProperties": false
+              }
+            },
+            "additionalItems": false,
+            "additionalProperties": false,
+            "examples": [
+              {
+                "selfParent": {
+                  "classType": "TransactionLine"
+                }
+              },
+              {
+                "derived": {
+                  "codeLine": "container.getTransactionLines().size() == 0 ? null : container.getTransactionLines().get(0)",
+                  "sources": [
+                    "makeSourceChain(StatementTransaction_TransactionLines)"
+                  ]
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_CoreLine, TransactionLine_Value",
+                  "default": 0.0
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_CoreLine, TransactionLine_Description",
+                  "default": "\"\""
+                }
+              },
+              {
+                "derived": {
+                  "codeLine": "{\n                            for (Translation translation : container.getTranslationList()) {\n                                // Does this rule apply to this StatementTransaction\n                                boolean matched = false;\n                                if (translation.getOriginal().contains(\"'\")) { // OR\n                                    String[] toCheck = translation.getOriginal().split(\"'\");\n                                    for (String check : toCheck) {\n                                        if (container.getDescription().contains(check)) {\n                                            matched = true;\n                                            break;\n                                        }\n                                    }\n                                } else if (translation.getOriginal().contains(\"~\")) { // AND\n                                    String[] toCheck = translation.getOriginal().split(\"~\");\n                                    matched = true;\n                                    for (String check : toCheck) {\n                                        if (!container.getDescription().contains(check)) {\n                                            matched = false;\n                                            break;\n                                        }\n                                    }\n                                } else { // 1 only\n                                    matched = container.getDescription().contains(translation.getOriginal());\n                                }\n                                if (matched) {\n                                    return translation;\n                                }\n                            }\n                            return null;\n                        }",
+                  "sources": [
+                    "Source_Factory.append(Source_Factory.makeSharedStepSourceChain(StatementTransaction_TranslationList, Translation_Original, Translation_Translated)\n                                , makeSourceChain(StatementTransaction_Description))"
+                  ]
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank, Bank_Currency",
+                  "defaultGetter": "container -> container.getTrackingDatabase().getDefault(Currency.class)"
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank",
+                  "defaultGetter": "container -> container.getTrackingDatabase().getDefault(Bank.class)"
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_CoreLine, TransactionLine_Period",
+                  "defaultGetter": "container -> container.getTrackingDatabase().getDefault(Period.class)"
+                }
+              },
+              {
+                "directDerived": {
+                  "sources": "StatementTransaction_StatementFolder, StatementFolder_TranslationTypes",
+                  "defaultGetter": "container -? container.getTrackingDatabase().getDefault(TranslationTypes.class)"
+                }
+              },
+              {
+                "multiParentList": {
+                  "parents": "StatementTransaction_TranslationTypes"
+                }
+              }
+            ]
+          }
+        },
+        "additionalItems": false,
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalItems": false,
+  "additionalProperties": false
+}
