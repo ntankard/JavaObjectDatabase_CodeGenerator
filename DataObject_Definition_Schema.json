@@ -165,7 +165,7 @@
             "properties": {
               "static": {
                 "type": "object",
-                "title": "A Static DataCore",
+                "title": "A Static DataCore who value is a literal",
                 "required": [
                   "value"
                 ],
@@ -176,14 +176,55 @@
                   }
                 },
                 "additionalItems": false,
-                "additionalProperties": false,
-                "examples": [
-                  {
-                    "static": {
-                      "value": "Receipts"
-                    }
+                "additionalProperties": false
+              },
+              "instanceStatic": {
+                "type": "object",
+                "title": "A Static DataCore who value extends DataObject. Default is used unless specialKey is provided",
+                "properties": {
+                  "specialKey": {
+                    "type": "string",
+                    "title": "The key fore the special instance to get"
                   }
-                ]
+                },
+                "additionalItems": false,
+                "additionalProperties": false
+              },
+              "directDerived": {
+                "type": "object",
+                "title": "A DirectDerived DataCore",
+                "required": [
+                  "sources"
+                ],
+                "properties": {
+                  "sources": {
+                    "type": "string",
+                    "title": "An coma separated list of fields leading to the field this field takes a value from",
+                    "examples": [
+                      "StatementTransaction_CoreLine, TransactionLine_Value",
+                      "StatementTransaction_CoreLine, TransactionLine_Description",
+                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank, Bank_Currency",
+                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank",
+                      "StatementTransaction_CoreLine, TransactionLine_Period",
+                      "StatementTransaction_StatementFolder, StatementFolder_TranslationTypes"
+                    ]
+                  },
+                  "defaultGetter": {
+                    "type": "string",
+                    "title": "A function to get the default value before a value can be calculated. Can be a literal. Starts with container -> ",
+                    "examples": [
+                      "\"DefaultValue\"",
+                      "0.0",
+                      "container.getTrackingDatabase().getDefault(Currency.class)",
+                      "container.getTrackingDatabase().getDefault(Bank.class)",
+                      "container.getTrackingDatabase().getDefault(Period.class)",
+                      "container.getTrackingDatabase().getDefault(TranslationTypes.class)"
+                    ]
+                  }
+
+                },
+                "additionalItems": false,
+                "additionalProperties": false
               },
               "derived": {
                 "type": "object",
@@ -257,46 +298,6 @@
                     }
                   }
                 ]
-              },
-              "directDerived": {
-                "type": "object",
-                "title": "A DirectDerived DataCore",
-                "required": [
-                  "sources"
-                ],
-                "properties": {
-                  "defaultValue": {
-                    "type": [
-                      "number",
-                      "string"
-                    ],
-                    "title": "The default value to set before a value can be calculated"
-                  },
-                  "defaultGetter": {
-                    "type": "string",
-                    "title": "A function to get the default value before a value can be calculated",
-                    "examples": [
-                      "container -> container.getTrackingDatabase().getDefault(Currency.class)",
-                      "container -> container.getTrackingDatabase().getDefault(Bank.class)",
-                      "container -> container.getTrackingDatabase().getDefault(Period.class)",
-                      "container -> container.getTrackingDatabase().getDefault(TranslationTypes.class)"
-                    ]
-                  },
-                  "sources": {
-                    "type": "string",
-                    "title": "An coma separated list of fields leading to the field this field takes a value from",
-                    "examples": [
-                      "StatementTransaction_CoreLine, TransactionLine_Value",
-                      "StatementTransaction_CoreLine, TransactionLine_Description",
-                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank, Bank_Currency",
-                      "StatementTransaction_CoreLine, TransactionLine_StatementDocument, StatementDocument_StatementFolder, StatementFolder_Bank",
-                      "StatementTransaction_CoreLine, TransactionLine_Period",
-                      "StatementTransaction_StatementFolder, StatementFolder_TranslationTypes"
-                    ]
-                  }
-                },
-                "additionalItems": false,
-                "additionalProperties": false
               },
               "multiParentList": {
                 "type": "object",

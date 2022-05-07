@@ -268,10 +268,10 @@ class ClassGenerator:
             pass
 
         def add_field(self, field):
-                self._prefix_needed = True
-                self._section.append(
-                    "public static final String " + field['key'] + " = " + self._parent.field_prefix + " + \"" + field[
-                        'name'] + "\"")
+            self._prefix_needed = True
+            self._section.append(
+                "public static final String " + field['key'] + " = " + self._parent.field_prefix + " + \"" + field[
+                    'name'] + "\"")
 
         def add(self, java_class):
             if self._prefix_needed:
@@ -347,7 +347,16 @@ class ClassGenerator:
                 if 'static' in data_core:
                     static = data_core['static']
                     section.append("dataObjectSchema.get(" + field[
-                        'key'] + ").setDataCore_schema(new Static_DataCore_Schema<>(" + static['value'] + "))")
+                        'key'] + ").setDataCore_schema(createStaticDataCore(" + static['value'] + "))")
+                elif 'instanceStatic' in data_core:
+                    static = data_core['instanceStatic']
+                    if 'specialKey' in static:
+                        section.append("dataObjectSchema.<" + field['type'] + ">get(" + field[
+                            'key'] + ").setDataCore_schema(createStaticObjectDataCore(" + field['type'] + ".class, " +
+                                       static['specialKey'] + "))")
+                    else:
+                        section.append("dataObjectSchema.<" + field['type'] + ">get(" + field[
+                            'key'] + ").setDataCore_schema(createStaticObjectDataCore(" + field['type'] + ".class))")
                 elif 'derived' in data_core:
                     derived = data_core['derived']
                     data_core_section = WritableSection()
@@ -384,13 +393,9 @@ class ClassGenerator:
 
                     data_core_section.append(
                         "dataObjectSchema.<" + field['getType'] + ">get(" + field['key'] + ").setDataCore_schema(")
-                    if "defaultValue" in direct_derived:
+                    if "defaultGetter" in direct_derived:
                         data_core_section.append(
-                            "        createDefaultDirectDerivedDataCore(" + str(direct_derived['defaultValue']) + ",")
-                        data_core_section.append("                " + direct_derived['sources'] + "));")
-                    elif "defaultGetter" in direct_derived:
-                        data_core_section.append(
-                            "        createDefaultDirectDerivedDataCoreGetter(" + str(
+                            "        createDirectDerivedDataCore(container -> " + str(
                                 direct_derived['defaultGetter']) + ",")
                         data_core_section.append("                " + direct_derived['sources'] + "));")
                     else:
